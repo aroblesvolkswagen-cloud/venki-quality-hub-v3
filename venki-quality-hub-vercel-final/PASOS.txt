@@ -1,0 +1,18 @@
+PASOS PARA VER LA APLICACIÓN FUNCIONANDO
+
+Puedes ver esta misma lista en la terminal ejecutando `npm run pasos`.
+
+1. Instala Node.js desde https://nodejs.org/ descargando la versión LTS y completando el asistente.
+2. Descarga este proyecto desde GitHub con el botón "Code" > "Download ZIP" y descomprime el archivo en una carpeta fácil de encontrar.
+3. Abre una ventana de comandos (Node.js command prompt en Windows o Terminal en macOS/Linux).
+4. En la ventana de comandos entra a la carpeta del proyecto escribiendo:
+   cd /ruta/donde/guardaste/venki-quality-hub-vercel-final
+5. Ejecuta la instalación inicial:
+   npm install
+6. Si tienes clave de Gemini, crea un archivo llamado .env.local dentro de la carpeta del proyecto con el contenido:
+   VITE_GEMINI_API_KEY=TU_CLAVE_AQUI
+   (si no tienes la clave puedes saltarte este paso; la app mostrará datos de demostración).
+7. Enciende la aplicación con:
+   npm run dev
+8. Abre el enlace que aparece en la terminal, normalmente http://localhost:5173/, en tu navegador sin cerrar la terminal.
+9. Para detener la aplicación regresa a la terminal y presiona Ctrl + C (o Cmd + C en macOS).

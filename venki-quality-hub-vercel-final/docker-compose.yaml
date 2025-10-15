@@ -1,0 +1,10 @@
+services:
+  venki-quality-hub:
+    build:
+      context: .
+      args:
+        VITE_GEMINI_API_KEY: ${VITE_GEMINI_API_KEY-}
+    image: venki-quality-hub:latest
+    ports:
+      - "4173:80"
+    restart: unless-stopped

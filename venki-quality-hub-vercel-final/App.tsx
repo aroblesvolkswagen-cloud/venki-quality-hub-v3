@@ -1,135 +1,112 @@
-import React, { useEffect } from 'react';
-import { useAppStore } from './useAppStore';
-import LoginScreen from './components/LoginScreen';
-import HorizontalNav from './components/HorizontalNav';
-import ExecutiveDashboard from './modules/ExecutiveDashboard';
-import OrderManagement from './modules/OrderManagement';
-import ScrapControl from './modules/ScrapControl';
-import Inventory from './modules/Inventory';
-import MachineManagement from './modules/MachineManagement';
-import EmployeeManagement from './modules/EmployeeManagement';
-import FmeaManagement from './modules/FmeaManagement';
-import WelcomeScreen from './components/WelcomeScreen';
-import Settings from './modules/Settings';
-import Trash from './modules/Trash';
-import { Module } from './types';
+import React, { Component, useEffect, useState } from 'react';
+import { AlertTriangle, Bot, BookOpen, Wheat } from 'lucide-react';
+import BrewForm from './components/BrewForm';
+import HopsDatabaseTable from './components/HopsDatabaseTable';
+import MaltSubstitutesTable from './components/MaltSubstitutesTable';
+import RecipeDisplay from './components/RecipeDisplay';
+import { generateRecipe } from './services/geminiService';
+import { RecipeResponse, UserInput } from './types';
 
-const Notification: React.FC = () => {
-    const notification = useAppStore(state => state.notification);
-    const clearNotification = useAppStore(state => state.clearNotification);
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; message?: string }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: undefined };
+  }
 
-    useEffect(() => {
-        if (notification) {
-            const timer = setTimeout(() => {
-                clearNotification();
-            }, 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [notification, clearNotification]);
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, message: error.message };
+  }
 
-    if (!notification) return null;
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error('ErrorBoundary atrapó un error', error, errorInfo);
+  }
 
-    const baseStyle = "fixed bottom-5 right-5 p-4 rounded-lg shadow-lg text-white font-semibold z-[100] animate-fade-in-down glass glass-noise";
-    const styles = {
-        success: `${baseStyle} bg-green-500/80 border border-green-400`,
-        error: `${baseStyle} bg-red-500/80 border border-red-400`,
-    };
-
-    return (
-        <div className={styles[notification.type]}>
-            <div className="glass-specular"></div>
-            <div className="glass-glare"></div>
-            {notification.message}
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center">
+          <div className="p-6 rounded-2xl bg-slate-800 border border-red-400/40 max-w-xl text-center">
+            <AlertTriangle className="text-red-400 mx-auto mb-3" size={48} />
+            <h1 className="text-2xl font-bold mb-2">Algo salió mal</h1>
+            <p className="text-slate-300">{this.state.message}</p>
+          </div>
         </div>
-    );
-};
-
-const ConfirmDialog: React.FC = () => {
-    const dialog = useAppStore(state => state.confirmDialog);
-    const hideConfirm = useAppStore(state => state.hideConfirm);
-
-    if (!dialog) return null;
-
-    const handleConfirm = () => {
-        dialog.onConfirm();
-        hideConfirm();
-    };
-    
-    const handleCancel = () => {
-        if(dialog.onCancel) dialog.onCancel();
-        hideConfirm();
-    };
-
-    return (
-        <div className="fixed inset-0 z-[101] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm no-print p-4">
-            <div className="glass glass-magenta glass-noise w-full max-w-sm flex flex-col">
-                <div className="glass-specular"></div>
-                <div className="glass-glare"></div>
-                <div className="p-4 border-b border-white/20">
-                    <h3 className="text-lg font-semibold text-white">{dialog.title}</h3>
-                </div>
-                <div className="p-6">
-                    <p className="text-gray-200">{dialog.message}</p>
-                </div>
-                <div className="flex justify-end gap-3 p-4 bg-black/10">
-                    <button onClick={handleCancel} className="btn-secondary">
-                        Cancelar
-                    </button>
-                    <button onClick={handleConfirm} className="btn-primary">
-                        Confirmar
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const App: React.FC = () => {
-  const user = useAppStore(state => state.user);
-  const activeModule = useAppStore(state => state.activeModule);
+  const [recipe, setRecipe] = useState<RecipeResponse>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [showHops, setShowHops] = useState(false);
+  const [showMalt, setShowMalt] = useState(false);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
-  const renderModule = () => {
-    switch (activeModule) {
-      case Module.Home:
-        return <WelcomeScreen />;
-      case Module.Dashboard:
-        return <ExecutiveDashboard />;
-      case Module.OrderManagement:
-        return <OrderManagement />;
-      case Module.ScrapControl:
-        return <ScrapControl />;
-      case Module.InventoryAndMaterials:
-        return <Inventory />;
-      case Module.MachineManagement:
-        return <MachineManagement />;
-      case Module.EmployeeManagement:
-        return <EmployeeManagement />;
-      case Module.FMEA:
-        return <FmeaManagement />;
-      case Module.Settings:
-        return <Settings />;
-      case Module.Trash:
-        return <Trash />;
-      default:
-        return <WelcomeScreen />;
+  useEffect(() => {
+    const missing = !process?.env?.API_KEY;
+    setApiKeyMissing(missing);
+  }, []);
+
+  const handleSubmit = async (input: UserInput) => {
+    setLoading(true);
+    setError(undefined);
+    try {
+      const response = await generateRecipe(input);
+      setRecipe(response);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo generar la receta';
+      setError(message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!user) {
-    return <LoginScreen />;
-  }
-
   return (
-    <div className="flex flex-col min-h-screen">
-       <HorizontalNav />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <h2 className="text-3xl font-bold venki-title-gradient mb-6">{activeModule}</h2>
-          {renderModule()}
-        </main>
-        <Notification />
-        <ConfirmDialog />
-    </div>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-slate-900 text-slate-100">
+        <div className="max-w-6xl mx-auto px-4 pb-12">
+          <header className="py-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-amber-300 uppercase tracking-[0.3em] text-xs">AI Brewing Lab</p>
+              <h1 className="text-4xl font-bold text-white flex items-center gap-3">
+                <Bot className="text-amber-400" /> Maestro Cervecero AI
+              </h1>
+              <p className="text-slate-400 mt-2">Diseña recetas de 55 L, eficiencia 75%, tres ollas y sustituciones The Swaen / Lallemand.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowHops(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/40">
+                <BookOpen size={18} className="text-amber-300" /> Enciclopedia de lúpulos
+              </button>
+              <button onClick={() => setShowMalt(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/40">
+                <Wheat size={18} className="text-amber-300" /> Sustituciones de malta
+              </button>
+            </div>
+          </header>
+
+          {apiKeyMissing && (
+            <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/10 text-red-200 p-4">
+              ⚠️ No se encontró API_KEY. Establece process.env.API_KEY para conectar con Gemini.
+            </div>
+          )}
+
+          <BrewForm onSubmit={handleSubmit} loading={loading} />
+
+          {error && (
+            <div className="mt-4 rounded-xl border border-red-400/40 bg-red-500/10 text-red-200 p-4">
+              {error}
+            </div>
+          )}
+
+          <RecipeDisplay recipe={recipe} />
+        </div>
+
+        <HopsDatabaseTable isOpen={showHops} onClose={() => setShowHops(false)} />
+        <MaltSubstitutesTable isOpen={showMalt} onClose={() => setShowMalt(false)} />
+      </div>
+    </ErrorBoundary>
   );
 };
 
